@@ -11,7 +11,7 @@ function parseDNSHeader(buffer: Buffer): TDNSHeader {
       OPCODE: (buffer[2] & 0b01111000) >> 3,   // OPCODE field (4 bits)
       AA: (buffer[2] & 0b00000100) >> 2,       // AA field (1 bit)
       TC: (buffer[2] & 0b00000010) >> 1,       // TC field (1 bit)
-      RD: buffer[2] & 0b00000001,              // RD field (1 bit)
+      RD: buffer[2] & 0b00000001,              // Parse RD field from request (correct)
       RA: (buffer[3] & 0b10000000) >> 7,       // RA field (1 bit)
       Z: (buffer[3] & 0b01110000) >> 4,        // Z field (3 bits)
       ResponseCode: buffer[3] & 0b00001111,     // RCODE field (4 bits)
@@ -22,7 +22,7 @@ function parseDNSHeader(buffer: Buffer): TDNSHeader {
     }; 
   }
 
-  
+
   
   function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): TDNSHeader {
     return {
