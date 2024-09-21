@@ -43,6 +43,8 @@ function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): T
     // Set RCODE to 4 (Not Implemented) if the query type is not supported
     if (requestHeader.QDCount === 0 || answerCount === 0) {
         responseCode = 4; // Not Implemented
+    } else {
+        responseCode = 0; // NOERROR
     }
 
     return {
