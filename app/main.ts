@@ -38,6 +38,13 @@ function parseDNSHeader(buffer: Buffer): TDNSHeader {
 }
 
 function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): TDNSHeader {
+    let responseCode = 0; // Default to NOERROR (0)
+
+    // Set RCODE to 4 (Not Implemented) if the query type is not supported
+    if (requestHeader.QDCount === 0 || answerCount === 0) {
+        responseCode = 4; // Not Implemented
+    }
+
     return {
         ID: requestHeader.ID,
         QR: true,
@@ -47,7 +54,7 @@ function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): T
         RD: requestHeader.RD, // Set RD based on the request
         RA: 0,
         Z: 0,
-        ResponseCode: requestHeader.ResponseCode === 0 ? 0 : 4, // Adjust based on request
+        ResponseCode: responseCode, // Adjust based on request
         QDCount: requestHeader.QDCount,
         ANCount: answerCount,
         NSCount: 0,
