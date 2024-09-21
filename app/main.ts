@@ -72,6 +72,10 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const headerBuffer = DNSHeader.write(responseHeader);
         const questionBuffer = writeQuestion(question);
         const answerBuffer = writeAnswer(answers);
+        // Ensure RD (Recursion Desired) is set to true in the response header
+        if (requestHeader.RD) {
+            responseHeader.RD = 1;
+        }
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 
