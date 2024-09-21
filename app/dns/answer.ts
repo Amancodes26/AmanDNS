@@ -3,7 +3,7 @@ export type Answer ={
     type: number;
     class: number;
     ttl: number;
-    data: string;
+    data: Buffer;
 }
 
 
