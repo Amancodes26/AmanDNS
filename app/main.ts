@@ -13,7 +13,7 @@ const defaultHeader: TDNSHeader = {
     Z: 0,
     ResponseCode: ResponseCode.NO_ERROR,
     QDCount: 1,
-    ANCount: 0,
+    ANCount: 1,
     NSCount: 0,
     ARCount: 0,
 }
@@ -36,8 +36,9 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
             type: 1, 
             class: 1, 
             ttl: 60, 
-            data: '\x08\x08\x08\x08'}]
-            writeAnswer(answers)
+            data: '\x08\x08\x08\x08'
+        }]
+            
 
         // serialize the header and question
         const header = DNSHeader.write(defaultHeader);
