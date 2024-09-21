@@ -95,3 +95,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         console.log(`Error sending data: ${e}`);
     }
 });
+udpSocket.on("listening", () => {
+    const address = udpSocket.address();
+    console.log(`Server listening on ${address.address}:${address.port}`);
+});
