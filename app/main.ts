@@ -4,6 +4,12 @@ import { Question, writeQuestion } from "./dns/question";
 import { Answer, writeAnswer } from "./dns/answer";
 
 function parseDNSHeader(buffer: Buffer): TDNSHeader {
+    if (buffer.length < 12) {
+        throw new Error("Buffer too short to be a valid DNS header");
+    } else if (buffer.length > 512) {
+        throw new Error("Buffer too long to be a valid DNS header");
+    } 
+
     return {
         ID: buffer.readUInt16BE(0),
         QR: (buffer[2] & 0b10000000) >> 7,
@@ -28,7 +34,7 @@ function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): T
         OPCODE: requestHeader.OPCODE,
         AA: 0,
         TC: 0,
-        RD: 1, // Ensure RD (Recursion Desired) is set to true
+        RD: 0, // Ensure RD (Recursion Desired) is set to true
         RA: 0,
         Z: 0,
         ResponseCode: requestHeader.OPCODE === 0 ? 0 : 4,
@@ -38,8 +44,6 @@ function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): T
         ARCount: 0,
     };
 }
-
-// Removed unused writeDNSHeader function
 
 console.log("Logs from your program will appear here!");
 
