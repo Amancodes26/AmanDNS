@@ -19,8 +19,10 @@ function parseDNSHeader(buffer: Buffer): TDNSHeader {
       ANCount: buffer.readUInt16BE(6),          // ANCount field (16 bits)
       NSCount: buffer.readUInt16BE(8),          // NSCount field (16 bits)
       ARCount: buffer.readUInt16BE(10),         // ARCount field (16 bits)
-    };
+    }; 
   }
+
+  
   
   function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): TDNSHeader {
     return {
