@@ -22,7 +22,7 @@ function parseDNSHeader(buffer: Buffer): TDNSHeader {
 
     return {
         ID: buffer.readUInt16BE(0),
-        QR: ((buffer[2] & 0b10000000) >> 7) === 1,
+        QR: (buffer[2] & 0b10000000) >> 7 === 1,
         OPCODE: (buffer[2] & 0b01111000) >> 3,
         AA: (buffer[2] & 0b00000100) >> 2,
         TC: (buffer[2] & 0b00000010) >> 1,
@@ -44,10 +44,10 @@ function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): T
         OPCODE: requestHeader.OPCODE,
         AA: 0,
         TC: 0,
-        RD: true,
+        RD: requestHeader.RD, // Set RD based on the request
         RA: 0,
         Z: 0,
-        ResponseCode: requestHeader.OPCODE === 0 ? 0 : 4, // Using hardcoded values; consider using the ResponseCode enum
+        ResponseCode: requestHeader.ResponseCode === 0 ? 0 : 4, // Adjust based on request
         QDCount: requestHeader.QDCount,
         ANCount: answerCount,
         NSCount: 0,
@@ -67,9 +67,8 @@ udpSocket.on("listening", () => {
 
 udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
     try {
-        console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${data.readUInt16BE(0)}`);
-
         const requestHeader = parseDNSHeader(data);
+        console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${requestHeader.ID}`);
 
         const question: Question[] = [{ class: 1, type: 1, domainName: 'codecrafters.io' }];
         const answers: Answer[] = [{
