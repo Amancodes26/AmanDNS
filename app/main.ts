@@ -16,7 +16,7 @@ function parseDNSHeader(buffer: Buffer): TDNSHeader {
         OPCODE: (buffer[2] & 0b01111000) >> 3,
         AA: (buffer[2] & 0b00000100) >> 2,
         TC: (buffer[2] & 0b00000010) >> 1,
-        RD: buffer[2] & 0b00000001,
+        RD: (buffer[2] & 0b00000001) === 1,
         RA: (buffer[3] & 0b10000000) >> 7,
         Z: (buffer[3] & 0b01110000) >> 4,
         ResponseCode: buffer[3] & 0b00001111,
@@ -34,7 +34,7 @@ function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): T
         OPCODE: requestHeader.OPCODE,
         AA: 0,
         TC: 0,
-        RD: 0, // Ensure RD (Recursion Desired) is set to true
+        RD: true, // Ensure RD (Recursion Desired) is set to true
         RA: 0,
         Z: 0,
         ResponseCode: requestHeader.OPCODE === 0 ? 0 : 4,
@@ -76,10 +76,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const headerBuffer = DNSHeader.write(responseHeader);
         const questionBuffer = writeQuestion(question);
         const answerBuffer = writeAnswer(answers);
-        // Ensure RD (Recursion Desired) is set to true in the response header
-        if (requestHeader.RD) {
-            responseHeader.RD = 1;
-        }
+        
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 

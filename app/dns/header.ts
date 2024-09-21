@@ -38,7 +38,7 @@ export interface TDNSHeader{
     OPCODE: OPCODE,
     AA:number,
     TC:number,
-    RD:number,
+    RD:boolean,
     RA:number,
     Z:number,
     ResponseCode: ResponseCode,
