@@ -1,3 +1,4 @@
+
 export enum OPCODE{
     STANDARD_QUERY = 0,
     INVERSE_QUERY = 1,
@@ -35,10 +36,10 @@ export interface TDNSHeader{
     ID:number,
     QR: number,
     OPCODE: OPCODE,
-    AA:boolean,
-    TC:boolean,
-    RD:boolean,
-    RA:boolean,
+    AA:number,
+    TC:number,
+    RD:number,
+    RA:number,
     Z:number,
     ResponseCode: ResponseCode,
     QDCount:number,
