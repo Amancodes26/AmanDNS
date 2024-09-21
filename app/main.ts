@@ -28,7 +28,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
     try {
         console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port}`);
         //define dns question
-        const question: Question[] = [{class:1,type:1,domainName:"codecrafters.io"}]
+        const question: Question[] = [{class: 1, type: 1, domainName: 'codecrafters.io'}]
 
         // serialize the header and question
         const header = DNSHeader.write(defaultHeader);
