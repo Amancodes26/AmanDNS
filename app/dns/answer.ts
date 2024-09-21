@@ -27,7 +27,7 @@ export const writeAnswer = (answers: Answer[]) => {
         buffer.writeUInt16BE(q.data.length, 8);  // Write the data length (e.g., 4 for an IPv4 address)
   
         // Convert the data (IP address) to a buffer
-        const dataBuffer = Buffer.from(q.data, 'binary');
+        const dataBuffer = Buffer.from(q.data);
   
         // Concatenate domain name, buffer (type/class/ttl), and data
         return Buffer.concat([domainBuffer, buffer, dataBuffer]);
