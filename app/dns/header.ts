@@ -51,7 +51,7 @@ class DNSHeader{
     static write(values: TDNSHeader){
         const header = Buffer.alloc(12);
 
-        const flags = values.QR | (values.AA ? 1 : 0) << 5 | (values.TC ? 1 : 0) << 6 | (values.RD ? 1 : 0) << 7 | (values.RA ? 1 : 0) << 8 | values.Z << 4 | values.ResponseCode;
+        const flags = (values.QR << 15) | (values.AA ? 1 : 0) << 5 | (values.TC ? 1 : 0) << 6 | (values.RD ? 1 : 0) << 7 | (values.RA ? 1 : 0) << 8 | values.Z << 4 | values.ResponseCode;
         header.writeUInt16BE(values.ID, 0);
         header.writeUInt16BE(flags, 2);
         header.writeUInt16BE(values.QDCount, 4);
