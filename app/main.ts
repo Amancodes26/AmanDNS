@@ -4,11 +4,11 @@ import { Question , writeQuestion } from "./dns/question";
 
 const defaultHeader: TDNSHeader = {
     ID: 1234,
-    QR: 1,
+    QR: 0,
     OPCODE: OPCODE.STANDARD_QUERY,
     AA: false,
     TC: false,
-    RD: false,
+    RD: true,
     RA: false,
     Z: 0,
     ResponseCode: ResponseCode.NO_ERROR,
