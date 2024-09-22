@@ -24,6 +24,8 @@ udpSocket.on("listening", () => {
 });
 
 udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
+    console.log(`Raw data received: ${data.toString('hex')}`);
+
     try {
         if (data.length < BUFFER_MIN_LENGTH || data.length > BUFFER_MAX_LENGTH) {
             throw new BufferError("Invalid buffer length");
@@ -36,13 +38,10 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         // Parse Questions
         const questions = parseQuestions(data, header.QDCount);
         console.log(`Parsed ${questions.length} questions`);
-        questions.forEach((question, index) => {
-            console.log(`Question ${index + 1}: ${question.domainName} - Type: ${question.type}, Class: ${question.class}`);
-        });
-
+        
         // Create Answers based on Questions
         const answers = createAnswers(questions);
-
+        
         // Modify header for response
         header.QR = true; // Set response flag
         header.ANCount = answers.length;
@@ -56,6 +55,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         handleError(e as Error);
     }
 });
+
 
 function parseHeader(data: Buffer): TDNSHeader {
     const header = DNSHeader.fromBuffer(data);
