@@ -41,13 +41,16 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         
         // Create Answers based on Questions
         const answers = createAnswers(questions);
-        
+
         // Modify header for response
         header.QR = true; // Set response flag
         header.ANCount = answers.length;
+        // Ensure the response header ID matches the request header ID
+        const responseHeader = { ...header }; // Create a new header object to avoid mutation
+        responseHeader.ID = header.ID; // Use the same ID as the incoming request
 
         // Create DNS Response
-        const response = createResponse(header, questions, answers);
+        const response = createResponse(responseHeader, questions, answers);
 
         // Send Response back to the client
         sendResponse(response, remoteAddr, header.ID);
@@ -55,6 +58,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         handleError(e as Error);
     }
 });
+
 
 
 function parseHeader(data: Buffer): TDNSHeader {
