@@ -69,11 +69,13 @@ function parseDNSQuestions(buffer: Buffer, count: number): Question[] {
     for (let i = 0; i < count; i++) {
         const question = parseQuestion(buffer.slice(offset));
         questions.push(question);
-        offset += question.domainName.length + 5; // domain length + 2 (Type) + 2 (Class) + 1 (null terminator)
+        // Correct offset calculation for multiple questions
+        offset += question.domainName.split('.').reduce((acc, label) => acc + label.length + 1, 1) + 4; 
     }
 
     return questions;
 }
+
 
 console.log("Logs from your program will appear here!");
 
@@ -97,19 +99,20 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
             console.log(`Question ${index + 1}: ${question.domainName} - Type: ${question.type}, Class: ${question.class}`);
         });
 
+        // Build answers for all questions
         const answers: Answer[] = questions.map(question => ({
             domainName: question.domainName,
             type: 1,
             class: 1,
             ttl: 60,
-            data: Buffer.from([8, 8, 8, 8])  // IP address in Buffer format
+            data: Buffer.from([8, 8, 8, 8])  // Example IP address
         }));
 
         const responseHeader = createResponseHeader(requestHeader, answers.length);
 
         const headerBuffer = DNSHeader.write(responseHeader);
-        const questionBuffer = Buffer.concat(questions.map(q => writeQuestion([q]))); // Combine multiple questions
-        const answerBuffer = Buffer.concat(answers.map(a => writeAnswer([a]))); // Combine multiple answers
+        const questionBuffer = Buffer.concat(questions.map(q => writeQuestion([q])));
+        const answerBuffer = Buffer.concat(answers.map(a => writeAnswer([a])));
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 
