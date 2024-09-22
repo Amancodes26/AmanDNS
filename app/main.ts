@@ -77,7 +77,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const requestHeader = parseDNSHeader(data);
         console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${requestHeader.ID}`);
 
-        const question: Question[] = [{ class: 1, type: 1, domainName: 'codecrafters.io' }];
+        const question: Question[] = [{ class: 1, type: 1, domainName: 'reddit.com' }];
         const answers: Answer[] = [{
             domainName: 'codecrafters.io',
             type: 1,
