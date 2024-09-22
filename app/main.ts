@@ -1,5 +1,5 @@
 import * as dgram from "dgram";
-import DNSHeader, { TDNSHeader,  } from "./dns/header";
+import DNSHeader, { TDNSHeader } from "./dns/header";
 import { Question, parseQuestion, writeQuestion } from "./dns/question";
 import { Answer, writeAnswer } from "./dns/answer";
 
@@ -51,7 +51,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const response = createResponse(header, questions, answers);
 
         // Send Response back to the client
-        sendResponse(response, remoteAddr, header.ID);
+        sendResponse(response, remoteAddr, header.ID); // Use header.ID consistently
     } catch (e: unknown) {
         handleError(e as Error);
     }
@@ -87,7 +87,8 @@ function parseQuestions(data: Buffer, qdCount: number): Question[] {
     for (let i = 0; i < qdCount; i++) {
         const question = parseQuestion(data.subarray(offset));
         questions.push(question);
-        offset += question.byteLength;
+        offset += question.byteLength; // Adjust the offset based on the question's byte length
+        console.log(`Parsed question ${i + 1} at offset ${offset}`); // Debugging log for offset tracking
     }
     return questions;
 }
@@ -106,6 +107,7 @@ function createResponse(header: TDNSHeader, questions: Question[], answers: Answ
     const headerBuffer = DNSHeader.write(header);
     const questionBuffer = Buffer.concat(questions.map((q: Question) => writeQuestion([q])));
     const answerBuffer = Buffer.concat(answers.map((a: Answer) => writeAnswer([a])));
+    console.log("Creating response buffer...");
     return Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 }
 
