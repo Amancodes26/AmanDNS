@@ -91,6 +91,11 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${requestHeader.ID}`);
 
         const questions = parseDNSQuestions(data.slice(12), requestHeader.QDCount);
+        console.log(`Parsed ${questions.length} questions`);
+
+        questions.forEach((question, index) => {
+            console.log(`Question ${index + 1}: ${question.domainName} - Type: ${question.type}, Class: ${question.class}`);
+        });
 
         const answers: Answer[] = questions.map(question => ({
             domainName: question.domainName,
