@@ -1,144 +1,238 @@
-import * as dgram from "dgram";
-import DNSHeader, { TDNSHeader } from "./dns/header";
-import { Question, parseQuestion, writeQuestion } from "./dns/question";
-import { Answer, writeAnswer } from "./dns/answer";
+import * as dgram from 'dgram';
+import { argv } from 'process';
 
-const BUFFER_MIN_LENGTH = 12;
-const BUFFER_MAX_LENGTH = 512;
+const PORT = 2053;
+const udpSocket: dgram.Socket = dgram.createSocket('udp4');
 
-class BufferError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = "BufferError";
+type Question = {
+  domain: string;
+  qType: number;
+  qClass: number;
+};
+
+type DNSRecord = Question & {
+  ttl: number;
+  data: string;
+};
+
+type Label = {
+  offset: number;
+  content: string;
+  next?: Label;
+};
+
+function followOffsets({
+  labels,
+  labelOffsetMap,
+  offset,
+}: {
+  labels: Label[];
+  labelOffsetMap: Record<number, Label>;
+  offset: number;
+}) {
+  let currentLabel: Label | undefined = labelOffsetMap[offset];
+  while (currentLabel) {
+    labels.push(currentLabel);
+    currentLabel = currentLabel.next;
+  }
+}
+
+function parseQuestionSection(questionSection: Buffer, offset: number): Question[] {
+  let i = offset;
+  const questions: Question[] = [];
+  
+  while (i < questionSection.length) {
+    const domain = parseDomainName(questionSection, i);
+    i += domain.byteLength;
+    
+    if (i + 4 > questionSection.length) {
+      break;
     }
+    
+    const qType = questionSection.readUInt16BE(i);
+    i += 2;
+    const qClass = questionSection.readUInt16BE(i);
+    i += 2;
+    
+    questions.push({ domain: domain.name, qType, qClass });
+  }
+  
+  return questions;
 }
 
-console.log("Logs from your program will appear here!");
+function parseDomainName(buffer: Buffer, offset: number): { name: string; byteLength: number } {
+  const labels: string[] = [];
+  let i = offset;
+  let byteLength = 0;
 
-const udpSocket: dgram.Socket = dgram.createSocket("udp4");
-udpSocket.bind(2053, "127.0.0.1");
+  while (true) {
+    const length = buffer[i];
 
-udpSocket.on("listening", () => {
-    const address = udpSocket.address();
-    console.log(`Server listening on ${address.address}:${address.port}`);
-});
-
-udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
-    console.log(`Raw data received: ${data.toString('hex')}`);
-
-    try {
-        if (data.length < BUFFER_MIN_LENGTH || data.length > BUFFER_MAX_LENGTH) {
-            throw new BufferError("Invalid buffer length");
-        }
-
-        // Parse DNS Header
-        const header = parseHeader(data);
-        console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${header.ID}`);
-
-        // Parse Questions
-        const questions = parseQuestions(data, header.QDCount);
-        console.log(`Parsed ${questions.length} questions`);
-        
-        // Create Answers based on Questions
-        const answers = createAnswers(questions);
-
-        // Modify header for response
-        header.QR = true; // Set response flag
-        header.ANCount = answers.length;
-        // Ensure the response header ID matches the request header ID
-        const responseHeader = { ...header }; // Create a new header object to avoid mutation
-        responseHeader.ID = header.ID; // Use the same ID as the incoming request
-
-        // Create DNS Response
-        const response = createResponse(responseHeader, questions, answers);
-
-        // Send Response back to the client
-        sendResponse(response, remoteAddr, header.ID);
-    } catch (e: unknown) {
-        handleError(e as Error);
+    if (length === 0) {
+      byteLength++;
+      break;
     }
-});
 
-
-
-function parseHeader(data: Buffer): TDNSHeader {
-    const header = DNSHeader.fromBuffer(data);
-    header.ID = data.readUInt16BE(0);
-    const flags1 = data.readUInt8(2);
-    header.QR = (flags1 & 0x80) !== 0;
-    header.OPCODE = (flags1 >> 3) & 0x0F;
-    header.AA = (flags1 & 0x04) !== 0;
-    header.TC = (flags1 & 0x02) !== 0;
-    header.RD = (flags1 & 0x01) !== 0;
-
-    const flags2 = data.readUInt8(3);
-    header.RA = (flags2 & 0x80) !== 0;
-    header.Z = (flags2 >> 4) & 0x07;
-    header.ResponseCode = flags2 & 0x0F;
-
-    header.QDCount = data.readUInt16BE(4);
-    header.ANCount = data.readUInt16BE(6);
-    header.NSCount = data.readUInt16BE(8);
-    header.ARCount = data.readUInt16BE(10);
-
-    //    header.ID = header.ID;
-    return header;
-}
-
-function parseQuestions(data: Buffer, qdCount: number): Question[] {
-    let offset = 12;
-    const questions: Question[] = [];
-    for (let i = 0; i < qdCount; i++) {
-        const question = parseQuestion(data.subarray(offset));
-        questions.push(question);
-        offset += question.byteLength;
+    if ((length & 0xc0) === 0xc0) {
+      const pointerOffset = ((length & 0x3f) << 8) | buffer[i + 1];
+      const pointerResult = parseDomainName(buffer, pointerOffset);
+      labels.push(...pointerResult.name.split('.'));
+      byteLength += 2;
+      break;
     }
-    return questions;
+
+    i++;
+    byteLength += length + 1;
+    labels.push(buffer.slice(i, i + length).toString('ascii'));
+    i += length;
+  }
+
+  return { name: labels.join('.'), byteLength };
 }
 
-function createAnswers(questions: Question[]): Answer[] {
-    return questions.map(question => ({
-        domainName: question.domainName,
-        type: 1,  // A record
-        class: 1,  // IN class
-        ttl: 60,   // Time to live
-        data: Buffer.from([8, 8, 8, 8])  // Example IP address (8.8.8.8)
-    }));
+function recordToQuestion(record: DNSRecord): Buffer {
+  const domainParts = record.domain.split('.');
+  const domainBuffer = Buffer.concat(
+    domainParts.map(part => Buffer.concat([Buffer.from([part.length]), Buffer.from(part)]))
+  );
+  const endDomain = Buffer.from([0]);
+  const typeAndClass = Buffer.alloc(4);
+  typeAndClass.writeUInt16BE(record.qType, 0);
+  typeAndClass.writeUInt16BE(record.qClass, 2);
+  
+  return Buffer.concat([domainBuffer, endDomain, typeAndClass]);
 }
 
-function createResponse(header: TDNSHeader, questions: Question[], answers: Answer[]): Buffer {
-    // Create the header buffer
-    const headerBuffer = DNSHeader.write(header);
-
-    // Write questions in uncompressed format
-    const questionBuffer = Buffer.concat(
-        questions.map((q: Question) => writeQuestion([q])) // Ensure writeQuestion outputs uncompressed labels
-    );
-
-    // Write answers in uncompressed format
-    const answerBuffer = Buffer.concat(
-        answers.map((a: Answer) => writeAnswer([a])) // Ensure writeAnswer outputs uncompressed labels
-    );
-
-    // Concatenate the header, questions, and answers into a single buffer
-    return Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
+function recordToAnswer(record: DNSRecord): Buffer {
+  const question = recordToQuestion(record);
+  const ttlAndLength = Buffer.alloc(6);
+  ttlAndLength.writeUInt32BE(record.ttl, 0);
+  const ipParts = record.data.split('.').map(Number);
+  const ipBuffer = Buffer.from(ipParts);
+  ttlAndLength.writeUInt16BE(ipBuffer.length, 4);
+  
+  return Buffer.concat([question, ttlAndLength, ipBuffer]);
 }
 
+class DNSMessage {
+  private packetId: number;
+  private queryResponse: boolean;
+  private opCode: number;
+  private authoritativeAnswer: boolean = false;
+  private truncation: boolean = false;
+  private recursionDesired: boolean;
+  private recursionAvailable: boolean = false;
+  private responseCode: number = 0;
+  private records: DNSRecord[];
 
-function sendResponse(response: Buffer, remoteAddr: dgram.RemoteInfo, headerId: number): void {
-    udpSocket.send(response, remoteAddr.port, remoteAddr.address, (err) => {
-        if (err) {
-            console.error('Error sending response:', err);
-        } else {
-            console.log(`Response sent to ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${headerId}`);
-        }
-    });
-}
-
-function handleError(e: Error): void {
-    if (e instanceof BufferError) {
-        console.error(`Buffer error: ${e.message}`);
+  constructor(queryData?: Buffer) {
+    if (queryData) {
+      this.packetId = queryData.readUInt16BE(0);
+      this.queryResponse = true;
+      const flags = queryData.readUInt16BE(2);
+      this.opCode = (flags >> 11) & 0xF;
+      this.recursionDesired = Boolean(flags & 0x0100);
+      
+      // Handle all opcodes
+      if (this.opCode === 0) { // Standard QUERY
+        this.responseCode = 0; // No error
+        this.records = parseQuestionSection(queryData, 12).map((question) => ({
+          ...question,
+          ttl: 60,
+          data: '8.8.8.8',
+        }));
+      } else {
+        this.responseCode = 4; // NOTIMP for all non-standard opcodes
+        this.records = [];
+      }
     } else {
-        console.error(`Error processing message: ${e}`);
+      throw new Error('DNSMessage question mode not implemented');
     }
+  }
+
+  toBuffer(): Buffer {
+    const header = this.getHeader();
+    const questions = this.getQuestionSection();
+    const answers = this.getAnswerSection();
+
+    return Buffer.concat([header, questions, answers]);
+  }
+
+  private getHeader(): Buffer {
+    const header = Buffer.alloc(12);
+    header.writeUInt16BE(this.packetId, 0);
+    
+    let flags = 0;
+    flags |= this.queryResponse ? 0x8000 : 0;
+    flags |= (this.opCode << 11) & 0x7800;
+    flags |= this.authoritativeAnswer ? 0x0400 : 0;
+    flags |= this.truncation ? 0x0200 : 0;
+    flags |= this.recursionDesired ? 0x0100 : 0;
+    flags |= this.recursionAvailable ? 0x0080 : 0;
+    flags |= this.responseCode & 0x000F;
+    
+    header.writeUInt16BE(flags, 2);
+    header.writeUInt16BE(this.records.length, 4); // QDCOUNT
+    header.writeUInt16BE(this.opCode === 1 || this.opCode === 2 ? 0 : this.records.length, 6); // ANCOUNT
+    header.writeUInt16BE(0, 8); // NSCOUNT
+    header.writeUInt16BE(0, 10); // ARCOUNT
+
+    return header;
+  }
+
+  private getQuestionSection(): Buffer {
+    return Buffer.concat(this.records.map(recordToQuestion));
+  }
+
+  private getAnswerSection(): Buffer {
+    return this.opCode === 1 || this.opCode === 2 ? Buffer.alloc(0) : Buffer.concat(this.records.map(recordToAnswer));
+  }
 }
+
+class DNS {
+  parseQuestion(data: Buffer, startOffset: number): [string, number] {
+    let labels: string[] = [];
+    let offset = startOffset;
+    let jumping = false;
+    let jumpOffset = -1;
+
+    while (offset < data.length) {
+      const length = data[offset];
+      if (length === 0) {
+        if (!jumping) offset++;
+        break;
+      }
+      if ((length & 0xC0) === 0xC0) {
+        if (!jumping) {
+          jumpOffset = offset + 2;
+        }
+        jumping = true;
+        offset = ((length & 0x3F) << 8) | data[offset + 1];
+        continue;
+      }
+      if (offset + length + 1 > data.length) break;
+      labels.push(data.subarray(offset + 1, offset + 1 + length).toString("ascii"));
+      offset += length + 1;
+      if (jumping && jumpOffset !== -1) {
+        offset = jumpOffset;
+        jumping = false;
+        jumpOffset = -1;
+      }
+    }
+
+    return [labels.join('.'), offset];
+  }
+}
+
+udpSocket.on('message', (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
+  try {
+    const dnsMessage = new DNSMessage(data);
+    const response = dnsMessage.toBuffer();
+    udpSocket.send(response, remoteAddr.port, remoteAddr.address);
+  } catch (e) {
+    console.log(`Error processing or sending data: ${e}`);
+  }
+});
+udpSocket.bind(PORT, '127.0.0.1', () => {
+    console.log(`[${new Date().toISOString()}] Socket bound to 127.0.0.1:${PORT}`);
+});
