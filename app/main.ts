@@ -69,7 +69,7 @@ function parseDNSQuestions(buffer: Buffer, count: number): Question[] {
     for (let i = 0; i < count; i++) {
         const question = parseQuestion(buffer.slice(offset));
         questions.push(question);
-        offset += question.domainName.split('.').reduce((acc, label) => acc + label.length + 1, 1) + 4; // domain length + null byte + type + class
+        offset += question.domainName.length + 5; // domain length + 2 (Type) + 2 (Class) + 1 (null terminator)
     }
 
     return questions;
@@ -108,8 +108,8 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const responseHeader = createResponseHeader(requestHeader, answers.length);
 
         const headerBuffer = DNSHeader.write(responseHeader);
-        const questionBuffer = writeQuestion(questions);
-        const answerBuffer = writeAnswer(answers);
+        const questionBuffer = Buffer.concat(questions.map(q => writeQuestion([q]))); // Combine multiple questions
+        const answerBuffer = Buffer.concat(answers.map(a => writeAnswer([a]))); // Combine multiple answers
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 
