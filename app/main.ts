@@ -114,7 +114,13 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const questionBuffer = Buffer.concat(questions.map(q => writeQuestion([q])));
         const answerBuffer = Buffer.concat(answers.map(a => writeAnswer([a])));
 
+        console.log(`Header Buffer: ${headerBuffer}`);
+        console.log(`Question Buffer: ${questionBuffer}`);
+        console.log(`Answer Buffer: ${answerBuffer}`);
+
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
+
+        console.log(`Final Response Buffer: ${response}`);
 
         console.log(`Sending response with Header ID: ${responseHeader.ID}`);
         udpSocket.send(response, remoteAddr.port, remoteAddr.address, (err) => {
