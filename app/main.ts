@@ -1,6 +1,6 @@
 import * as dgram from "dgram";
-import DNSHeader, { TDNSHeader, OPCODE, ResponseCode } from "./dns/header";
-import { Question, writeQuestion, parseQuestion } from "./dns/question";
+import DNSHeader, { TDNSHeader,  } from "./dns/header";
+import { Question, parseQuestion, writeQuestion } from "./dns/question";
 import { Answer, writeAnswer } from "./dns/answer";
 
 const BUFFER_MIN_LENGTH = 12;
@@ -11,69 +11,6 @@ class BufferError extends Error {
         super(message);
         this.name = "BufferError";
     }
-}
-
-function parseDNSHeader(buffer: Buffer): TDNSHeader {
-    if (buffer.length < BUFFER_MIN_LENGTH) {
-        throw new BufferError("Buffer too short to be a valid DNS header");
-    } else if (buffer.length > BUFFER_MAX_LENGTH) {
-        throw new BufferError("Buffer too long to be a valid DNS header");
-    }
-
-    return {
-        ID: buffer.readUInt16BE(0),
-        QR: (buffer[2] & 0b10000000) >> 7 === 1,
-        OPCODE: (buffer[2] & 0b01111000) >> 3,
-        AA: (buffer[2] & 0b00000100) >> 2,
-        TC: (buffer[2] & 0b00000010) >> 1,
-        RD: (buffer[2] & 0b00000001) === 1,
-        RA: (buffer[3] & 0b10000000) >> 7,
-        Z: (buffer[3] & 0b01110000) >> 4,
-        ResponseCode: buffer[3] & 0b00001111,
-        QDCount: buffer.readUInt16BE(4),
-        ANCount: buffer.readUInt16BE(6),
-        NSCount: buffer.readUInt16BE(8),
-        ARCount: buffer.readUInt16BE(10),
-    };
-}
-
-function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): TDNSHeader {
-    let responseCode = ResponseCode.NO_ERROR; // Default to NOERROR (0)
-
-    // Set RCODE to 4 (Not Implemented) if the query type is not supported
-    if (requestHeader.OPCODE !== OPCODE.STANDARD_QUERY) {
-        responseCode = ResponseCode.NOT_IMPLEMENTED; // Not Implemented
-    }
-
-    return {
-        ID: requestHeader.ID,
-        QR: true,
-        OPCODE: requestHeader.OPCODE,
-        AA: 0,
-        TC: 0,
-        RD: requestHeader.RD, // Set RD based on the request
-        RA: 0,
-        Z: 0,
-        ResponseCode: responseCode, // Adjust based on request
-        QDCount: requestHeader.QDCount,
-        ANCount: answerCount,
-        NSCount: 0,
-        ARCount: 0,
-    };
-}
-
-function parseDNSQuestions(buffer: Buffer, count: number): Question[] {
-    const questions: Question[] = [];
-    let offset = 0;
-
-    for (let i = 0; i < count; i++) {
-        const question = parseQuestion(buffer.slice(offset));
-        questions.push(question);
-        // Correct offset calculation for multiple questions
-        offset += question.domainName.split('.').reduce((acc, label) => acc + label.length + 1, 1) + 4; 
-    }
-
-    return questions;
 }
 
 console.log("Logs from your program will appear here!");
@@ -88,61 +25,104 @@ udpSocket.on("listening", () => {
 
 udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
     try {
-        const requestHeader = parseDNSHeader(data);
-        console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${requestHeader.ID}`);
+        if (data.length < BUFFER_MIN_LENGTH || data.length > BUFFER_MAX_LENGTH) {
+            throw new BufferError("Invalid buffer length");
+        }
 
-        const questions = parseDNSQuestions(data.slice(12), requestHeader.QDCount);
+        // Parse DNS Header
+        const header = parseHeader(data);
+        console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${header.ID}`);
+
+        // Parse Questions
+        const questions = parseQuestions(data, header.QDCount);
         console.log(`Parsed ${questions.length} questions`);
-
         questions.forEach((question, index) => {
             console.log(`Question ${index + 1}: ${question.domainName} - Type: ${question.type}, Class: ${question.class}`);
         });
 
-        // Build answers for all questions
-        const answers: Answer[] = questions.map(question => ({
-            domainName: question.domainName,
-            type: 1,
-            class: 1,
-            ttl: 60,
-            data: Buffer.from([8, 8, 8, 8])  // Example IP address
-        }));
+        // Create Answers based on Questions
+        const answers = createAnswers(questions);
 
-        const responseHeader = createResponseHeader(requestHeader, answers.length);
+        // Modify header for response
+        header.QR = true; // Set response flag
+        header.ANCount = answers.length;
 
-        const headerBuffer = DNSHeader.write(responseHeader);
-        const questionBuffer = Buffer.concat(questions.map(q => writeQuestion([q])));
-        const answerBuffer = Buffer.concat(answers.map(a => writeAnswer([a])));
+        // Create DNS Response
+        const response = createResponse(header, questions, answers);
 
-        console.log(`Header Buffer: ${headerBuffer.toString('hex')}`);
-        console.log(`Question Buffer: ${questionBuffer.toString('hex')}`);
-        console.log(`Answer Buffer: ${answerBuffer.toString('hex')}`);
-
-        const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
-
-        console.log(`Final Response Buffer: ${response.toString('hex')}`);
-
-        console.log(`Sending response with Header ID: ${responseHeader.ID}`);
-        udpSocket.send(response, remoteAddr.port, remoteAddr.address, (err) => {
-            if (err) {
-                console.error('Error sending response:', err);
-            } else {
-                console.log(`Response sent to ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${responseHeader.ID}`);
-            }
-        });
-    } catch (e) {
-        if (e instanceof BufferError) {
-            console.error(`Buffer error: ${e.message}`);
-        } else {
-            console.error(`Error processing message: ${e}`);
-        }
+        // Send Response back to the client
+        sendResponse(response, remoteAddr, header.ID);
+    } catch (e: unknown) {
+        handleError(e as Error);
     }
 });
 
-udpSocket.on("error", (err) => {
-    console.error(`Server error:\n${err.stack}`);
-    udpSocket.close();
-});
+function parseHeader(data: Buffer): TDNSHeader {
+    const header = DNSHeader.fromBuffer(data);
+    header.ID = data.readUInt16BE(0);
 
-udpSocket.on("close", () => {
-    console.log("Socket is closed!");
-});
+    const flags1 = data.readUInt8(2);
+    header.QR = (flags1 & 0x80) !== 0;
+    header.OPCODE = (flags1 >> 3) & 0x0F;
+    header.AA = (flags1 & 0x04) !== 0;
+    header.TC = (flags1 & 0x02) !== 0;
+    header.RD = (flags1 & 0x01) !== 0;
+
+    const flags2 = data.readUInt8(3);
+    header.RA = (flags2 & 0x80) !== 0;
+    header.Z = (flags2 >> 4) & 0x07;
+    header.ResponseCode = flags2 & 0x0F;
+
+    header.QDCount = data.readUInt16BE(4);
+    header.ANCount = data.readUInt16BE(6);
+    header.NSCount = data.readUInt16BE(8);
+    header.ARCount = data.readUInt16BE(10);
+    
+    return header;
+}
+
+function parseQuestions(data: Buffer, qdCount: number): Question[] {
+    let offset = 12;
+    const questions: Question[] = [];
+    for (let i = 0; i < qdCount; i++) {
+        const question = parseQuestion(data.subarray(offset));
+        questions.push(question);
+        offset += question.byteLength;
+    }
+    return questions;
+}
+
+function createAnswers(questions: Question[]): Answer[] {
+    return questions.map(question => ({
+        domainName: question.domainName,
+        type: 1,  // A record
+        class: 1,  // IN class
+        ttl: 60,   // Time to live
+        data: Buffer.from([8, 8, 8, 8])  // Example IP address (8.8.8.8)
+    }));
+}
+
+function createResponse(header: TDNSHeader, questions: Question[], answers: Answer[]): Buffer {
+    const headerBuffer = DNSHeader.write(header);
+    const questionBuffer = Buffer.concat(questions.map((q: Question) => writeQuestion([q])));
+    const answerBuffer = Buffer.concat(answers.map((a: Answer) => writeAnswer([a])));
+    return Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
+}
+
+function sendResponse(response: Buffer, remoteAddr: dgram.RemoteInfo, headerId: number): void {
+    udpSocket.send(response, remoteAddr.port, remoteAddr.address, (err) => {
+        if (err) {
+            console.error('Error sending response:', err);
+        } else {
+            console.log(`Response sent to ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${headerId}`);
+        }
+    });
+}
+
+function handleError(e: Error): void {
+    if (e instanceof BufferError) {
+        console.error(`Buffer error: ${e.message}`);
+    } else {
+        console.error(`Error processing message: ${e}`);
+    }
+}

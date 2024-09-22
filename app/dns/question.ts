@@ -1,4 +1,5 @@
 export type Question = {
+  byteLength: number;
   type: number;
   class: number;
   domainName: string;
@@ -51,6 +52,7 @@ export const parseQuestion = (buffer: Buffer): Question => {
   return {
       domainName,
       type,
-      class: qclass
+      class: qclass,
+      byteLength: offset
   };
 };
