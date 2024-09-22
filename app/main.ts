@@ -108,7 +108,13 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 
-        udpSocket.send(response, remoteAddr.port, remoteAddr.address);
+        udpSocket.send(response, remoteAddr.port, remoteAddr.address, (err) => {
+            if (err) {
+                console.error('Error sending response:', err);
+            } else {
+                console.log(`Response sent to ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${responseHeader.ID}`);
+            }
+        });
     } catch (e) {
         if (e instanceof BufferError) {
             console.error(`Buffer error: ${e.message}`);
