@@ -78,6 +78,8 @@ function parseHeader(data: Buffer): TDNSHeader {
     header.NSCount = data.readUInt16BE(8);
     header.ARCount = data.readUInt16BE(10);
     
+    // Ensure the ID is preserved
+    header.ID = header.ID;
     return header;
 }
 
