@@ -107,11 +107,23 @@ function createAnswers(questions: Question[]): Answer[] {
 }
 
 function createResponse(header: TDNSHeader, questions: Question[], answers: Answer[]): Buffer {
+    // Create the header buffer
     const headerBuffer = DNSHeader.write(header);
-    const questionBuffer = Buffer.concat(questions.map((q: Question) => writeQuestion([q])));
-    const answerBuffer = Buffer.concat(answers.map((a: Answer) => writeAnswer([a])));
+
+    // Write questions in uncompressed format
+    const questionBuffer = Buffer.concat(
+        questions.map((q: Question) => writeQuestion([q])) // Ensure writeQuestion outputs uncompressed labels
+    );
+
+    // Write answers in uncompressed format
+    const answerBuffer = Buffer.concat(
+        answers.map((a: Answer) => writeAnswer([a])) // Ensure writeAnswer outputs uncompressed labels
+    );
+
+    // Concatenate the header, questions, and answers into a single buffer
     return Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 }
+
 
 function sendResponse(response: Buffer, remoteAddr: dgram.RemoteInfo, headerId: number): void {
     udpSocket.send(response, remoteAddr.port, remoteAddr.address, (err) => {
