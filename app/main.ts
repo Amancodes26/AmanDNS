@@ -1,6 +1,6 @@
 import * as dgram from "dgram";
-import DNSHeader, { TDNSHeader } from "./dns/header";
-import { Question, writeQuestion } from "./dns/question";
+import DNSHeader, { TDNSHeader, OPCODE, ResponseCode } from "./dns/header";
+import { Question, writeQuestion, parseQuestion } from "./dns/question";
 import { Answer, writeAnswer } from "./dns/answer";
 
 const BUFFER_MIN_LENGTH = 12;
@@ -38,11 +38,11 @@ function parseDNSHeader(buffer: Buffer): TDNSHeader {
 }
 
 function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): TDNSHeader {
-    let responseCode = 0; // Default to NOERROR (0)
+    let responseCode = ResponseCode.NO_ERROR; // Default to NOERROR (0)
 
     // Set RCODE to 4 (Not Implemented) if the query type is not supported
-    if (requestHeader.OPCODE !== 0) {
-        responseCode = 4; // Not Implemented
+    if (requestHeader.OPCODE !== OPCODE.STANDARD_QUERY) {
+        responseCode = ResponseCode.NOT_IMPLEMENTED; // Not Implemented
     }
 
     return {
@@ -62,6 +62,19 @@ function createResponseHeader(requestHeader: TDNSHeader, answerCount: number): T
     };
 }
 
+function parseDNSQuestions(buffer: Buffer, count: number): Question[] {
+    const questions: Question[] = [];
+    let offset = 0;
+
+    for (let i = 0; i < count; i++) {
+        const question = parseQuestion(buffer.slice(offset));
+        questions.push(question);
+        offset += question.domainName.split('.').reduce((acc, label) => acc + label.length + 1, 1) + 4; // domain length + null byte + type + class
+    }
+
+    return questions;
+}
+
 console.log("Logs from your program will appear here!");
 
 const udpSocket: dgram.Socket = dgram.createSocket("udp4");
@@ -77,21 +90,20 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const requestHeader = parseDNSHeader(data);
         console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${requestHeader.ID}`);
 
-        const question = parseQuestion(data.slice(12)); // Assuming the question section starts at byte 12
-        const domainName = question.domainName;
+        const questions = parseDNSQuestions(data.slice(12), requestHeader.QDCount);
 
-        const answers: Answer[] = [{
-            domainName: domainName,
+        const answers: Answer[] = questions.map(question => ({
+            domainName: question.domainName,
             type: 1,
             class: 1,
             ttl: 60,
             data: Buffer.from([8, 8, 8, 8])  // IP address in Buffer format
-        }];
+        }));
 
         const responseHeader = createResponseHeader(requestHeader, answers.length);
 
         const headerBuffer = DNSHeader.write(responseHeader);
-        const questionBuffer = writeQuestion([question]);
+        const questionBuffer = writeQuestion(questions);
         const answerBuffer = writeAnswer(answers);
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
@@ -105,32 +117,3 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         }
     }
 });
-
-function parseQuestion(buffer: Buffer): Question {
-    let offset = 0;
-    const labels: string[] = [];
-
-    while (buffer[offset] !== 0) {
-        const labelLength = buffer[offset];
-        offset += 1;
-        labels.push(buffer.slice(offset, offset + labelLength).toString('ascii'));
-        offset += labelLength;
-    }
-
-    const domainName = labels.join('.');
-    offset += 1; // Skip the null byte that terminates the domain name
-
-    const type = buffer.readUInt16BE(offset);
-    offset += 2;
-
-    const qclass = buffer.readUInt16BE(offset);
-    offset += 2;
-
-    return {
-        domainName,
-        type,
-        class: qclass
-    };
-}
-// Removed the redundant parseQuestion function definition
-

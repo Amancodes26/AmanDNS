@@ -72,4 +72,3 @@ class DNSHeader {
 }
 
 export default DNSHeader;
-
