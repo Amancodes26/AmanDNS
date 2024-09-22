@@ -77,9 +77,11 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const requestHeader = parseDNSHeader(data);
         console.log(`Received data from ${remoteAddr.address}:${remoteAddr.port} - Header ID: ${requestHeader.ID}`);
 
-        const question: Question[] = [{ class: 1, type: 1, domainName: 'reddit.com' }];
+        const question = parseQuestion(data.slice(12)); // Assuming the question section starts at byte 12
+        const domainName = question.domainName;
+
         const answers: Answer[] = [{
-            domainName: 'codecrafters.io',
+            domainName: domainName,
             type: 1,
             class: 1,
             ttl: 60,
@@ -89,7 +91,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const responseHeader = createResponseHeader(requestHeader, answers.length);
 
         const headerBuffer = DNSHeader.write(responseHeader);
-        const questionBuffer = writeQuestion(question);
+        const questionBuffer = writeQuestion([question]);
         const answerBuffer = writeAnswer(answers);
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
@@ -102,5 +104,33 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
             console.error(`Error processing message: ${e}`);
         }
     }
-
 });
+
+function parseQuestion(buffer: Buffer): Question {
+    let offset = 0;
+    const labels: string[] = [];
+
+    while (buffer[offset] !== 0) {
+        const labelLength = buffer[offset];
+        offset += 1;
+        labels.push(buffer.slice(offset, offset + labelLength).toString('ascii'));
+        offset += labelLength;
+    }
+
+    const domainName = labels.join('.');
+    offset += 1; // Skip the null byte that terminates the domain name
+
+    const type = buffer.readUInt16BE(offset);
+    offset += 2;
+
+    const qclass = buffer.readUInt16BE(offset);
+    offset += 2;
+
+    return {
+        domainName,
+        type,
+        class: qclass
+    };
+}
+// Removed the redundant parseQuestion function definition
+
