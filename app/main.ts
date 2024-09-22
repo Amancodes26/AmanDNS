@@ -51,7 +51,7 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const response = createResponse(header, questions, answers);
 
         // Send Response back to the client
-        sendResponse(response, remoteAddr, header.ID); // Use header.ID consistently
+        sendResponse(response, remoteAddr, header.ID);
     } catch (e: unknown) {
         handleError(e as Error);
     }
@@ -60,7 +60,6 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
 function parseHeader(data: Buffer): TDNSHeader {
     const header = DNSHeader.fromBuffer(data);
     header.ID = data.readUInt16BE(0);
-
     const flags1 = data.readUInt8(2);
     header.QR = (flags1 & 0x80) !== 0;
     header.OPCODE = (flags1 >> 3) & 0x0F;
@@ -77,9 +76,8 @@ function parseHeader(data: Buffer): TDNSHeader {
     header.ANCount = data.readUInt16BE(6);
     header.NSCount = data.readUInt16BE(8);
     header.ARCount = data.readUInt16BE(10);
-    
-    // Ensure the ID is preserved
-    header.ID = header.ID;
+
+    //    header.ID = header.ID;
     return header;
 }
 
@@ -89,8 +87,7 @@ function parseQuestions(data: Buffer, qdCount: number): Question[] {
     for (let i = 0; i < qdCount; i++) {
         const question = parseQuestion(data.subarray(offset));
         questions.push(question);
-        offset += question.byteLength; // Adjust the offset based on the question's byte length
-        console.log(`Parsed question ${i + 1} at offset ${offset}`); // Debugging log for offset tracking
+        offset += question.byteLength;
     }
     return questions;
 }
@@ -109,7 +106,6 @@ function createResponse(header: TDNSHeader, questions: Question[], answers: Answ
     const headerBuffer = DNSHeader.write(header);
     const questionBuffer = Buffer.concat(questions.map((q: Question) => writeQuestion([q])));
     const answerBuffer = Buffer.concat(answers.map((a: Answer) => writeAnswer([a])));
-    console.log("Creating response buffer...");
     return Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 }
 
