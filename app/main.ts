@@ -76,7 +76,6 @@ function parseDNSQuestions(buffer: Buffer, count: number): Question[] {
     return questions;
 }
 
-
 console.log("Logs from your program will appear here!");
 
 const udpSocket: dgram.Socket = dgram.createSocket("udp4");
@@ -114,13 +113,13 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
         const questionBuffer = Buffer.concat(questions.map(q => writeQuestion([q])));
         const answerBuffer = Buffer.concat(answers.map(a => writeAnswer([a])));
 
-        console.log(`Header Buffer: ${headerBuffer}`);
-        console.log(`Question Buffer: ${questionBuffer}`);
-        console.log(`Answer Buffer: ${answerBuffer}`);
+        console.log(`Header Buffer: ${headerBuffer.toString('hex')}`);
+        console.log(`Question Buffer: ${questionBuffer.toString('hex')}`);
+        console.log(`Answer Buffer: ${answerBuffer.toString('hex')}`);
 
         const response = Buffer.concat([headerBuffer, questionBuffer, answerBuffer]);
 
-        console.log(`Final Response Buffer: ${response}`);
+        console.log(`Final Response Buffer: ${response.toString('hex')}`);
 
         console.log(`Sending response with Header ID: ${responseHeader.ID}`);
         udpSocket.send(response, remoteAddr.port, remoteAddr.address, (err) => {
@@ -137,4 +136,13 @@ udpSocket.on("message", (data: Buffer, remoteAddr: dgram.RemoteInfo) => {
             console.error(`Error processing message: ${e}`);
         }
     }
+});
+
+udpSocket.on("error", (err) => {
+    console.error(`Server error:\n${err.stack}`);
+    udpSocket.close();
+});
+
+udpSocket.on("close", () => {
+    console.log("Socket is closed!");
 });
